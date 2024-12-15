@@ -1,19 +1,12 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'package:audioplayers/audioplayers.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:path_provider/path_provider.dart';
 
-class ListNumber extends StatelessWidget {
-  final int number;
+import './display_song.dart';
 
-  const ListNumber({super.key, required this.number});
+final MusicFileExtensions = [".mp3", ".m4a"];
 
-  @override
-  Widget build(BuildContext context) {
-    return Text(number.toString());
-  }
-}
 
 class SongListPage extends StatefulWidget {
   const SongListPage({super.key});
@@ -23,8 +16,16 @@ class SongListPage extends StatefulWidget {
 }
 
 class _SongListPageState extends State<SongListPage> {
-  String file_directory = "a";
-  AudioPlayer audio_player = AudioPlayer();
+  static String folder_directory = "";
+  static List<String> music_list = [];
+
+
+  bool isMusicFile(String file_name) {
+    for (final file_extension in MusicFileExtensions) {
+      if (file_name.endsWith(file_extension)) return true;
+    }
+    return false;
+  }
 
   Future<bool> requestPermission(Permission permission) async {
     if (await permission.isGranted) {
@@ -36,8 +37,13 @@ class _SongListPageState extends State<SongListPage> {
   }
 
   Future<void> updateSongList() async {
-    List file = Directory(file_directory).listSync();
-    print(file);
+    // 1. Fetch & Filter for audio files.
+    List files = Directory(folder_directory).listSync();
+    files = files.where((file) => (file is File && isMusicFile(file.path))).toList();
+    
+    setState(() {
+      music_list = files.cast<File>().map((file) => file.path.substring(folder_directory.length+1)).toList();
+    });
   }
 
   void initDirectory() async {// Fetches folder directory and updates objects
@@ -51,7 +57,7 @@ class _SongListPageState extends State<SongListPage> {
 
       for (final path in directory.path.split("/")) {
         if (path != "Android") {
-          folder_path += "/$path";
+          folder_path += "$path/";
         } else {
           break;
         }
@@ -62,15 +68,24 @@ class _SongListPageState extends State<SongListPage> {
     }
 
     // 2. Create Song Folder if not exist
-    if (!Directory("${folder_path}Music").existsSync()) {
-
+    Directory song_dir = Directory("${folder_path}Music");
+    if (!song_dir.existsSync()) {
+      song_dir.createSync();
     }
 
-    // 3. Update "file_directory" & display
+    // 3. Update "folder_directory" & display
     setState(() {
-      file_directory = folder_path;
+      folder_directory = "${folder_path}Music";
     });
     await updateSongList();
+  }
+
+  void button_songOnClick(String song_name) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => DisplaySongPage(song_name: song_name, dir: folder_directory)
+      )
+    );
   }
 
   @override
@@ -80,21 +95,48 @@ class _SongListPageState extends State<SongListPage> {
 
     super.initState();
   }
-  
+
   @override
   Widget build(BuildContext context) {
-
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
         title: const Text("Song List"),
       ),
-      body: Column(
-        children: [Text(file_directory)],
+      bottomNavigationBar: BottomNavigationBar(
+        items: [
+          BottomNavigationBarItem(
+            icon: Icon(Icons.list),
+            label: "Song List",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.queue_music),
+            label: "Queue",
+          ),
+          BottomNavigationBarItem(
+            icon: Icon(Icons.play_arrow),
+            label: "Playing",
+          ),
+        ],
       ),
-      floatingActionButton: TextButton(
-        onPressed: initDirectory, 
-        child: const Text("For testing")
+      body: ListView.separated(
+        padding: EdgeInsets.all(10),
+        itemCount: music_list.length,
+        itemBuilder: (BuildContext context, int index) {
+          return TextButton(
+            style: TextButton.styleFrom(backgroundColor: const Color.fromARGB(255, 216, 255, 228)),
+            onPressed: () => button_songOnClick(music_list[index]),
+            child: Container(
+              padding: EdgeInsets.only(left: 8),
+              height: 50,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(music_list[index]),
+              ),
+            ),
+          );
+        },
+        separatorBuilder: (BuildContext context, int index) => const Divider(),
       ),
     );
   }
